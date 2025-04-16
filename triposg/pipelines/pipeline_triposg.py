@@ -132,10 +132,6 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
         return self._attention_kwargs
 
     @property
-    def interrupt(self):
-        return self._interrupt
-
-    @property
     def decode_progressive(self):
         return self._decode_progressive
 
@@ -186,7 +182,7 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
         num_tokens: int = 2048,
         timesteps: List[int] = None,
         guidance_scale: float = 7.0,
-        num_images_per_prompt: int = 1,
+        num_shapes_per_prompt: int = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
         attention_kwargs: Optional[Dict[str, Any]] = None,
@@ -202,7 +198,6 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
         # 1. Define call parameters
         self._guidance_scale = guidance_scale
         self._attention_kwargs = attention_kwargs
-        self._interrupt = False
 
         # 2. Define call parameters
         if isinstance(image, PIL.Image.Image):
@@ -218,7 +213,7 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
 
         # 3. Encode condition
         image_embeds, negative_image_embeds = self.encode_image(
-            image, device, num_images_per_prompt
+            image, device, num_shapes_per_prompt
         )
 
         if self.do_classifier_free_guidance:
@@ -236,7 +231,7 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
         # 5. Prepare latent variables
         num_channels_latents = self.transformer.config.in_channels
         latents = self.prepare_latents(
-            batch_size * num_images_per_prompt,
+            batch_size * num_shapes_per_prompt,
             num_tokens,
             num_channels_latents,
             image_embeds.dtype,
@@ -248,8 +243,6 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
         # 6. Denoising loop
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
 
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = (
@@ -293,18 +286,6 @@ class TripoSGPipeline(DiffusionPipeline, TransformerDiffusionMixin):
                     callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
 
                     latents = callback_outputs.pop("latents", latents)
-                    image_embeds_1 = callback_outputs.pop(
-                        "image_embeds_1", image_embeds_1
-                    )
-                    negative_image_embeds_1 = callback_outputs.pop(
-                        "negative_image_embeds_1", negative_image_embeds_1
-                    )
-                    image_embeds_2 = callback_outputs.pop(
-                        "image_embeds_2", image_embeds_2
-                    )
-                    negative_image_embeds_2 = callback_outputs.pop(
-                        "negative_image_embeds_2", negative_image_embeds_2
-                    )
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or (
